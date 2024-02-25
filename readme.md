@@ -7,16 +7,28 @@ In this repo, I will share how I usually deploy and configure a ghost with docke
 ## Our Goals
 
 - Run a docker image is cheap (or free), but managed database is not.
-- SQLite is the most affordable (since it doesn't need any server). But Ghost 5 are [dropping it's support for SQLite](https://ghost.org/changelog/5) in production. But yeah we can still use it.
+- SQLite is the most affordable (since it doesn't need any server). But Ghost 5 are [dropping it's support for SQLite](https://ghost.org/changelog/5) in production. But yeah we can still use it, but really recommended to pin the version.
 - When we run container, most of the time we will expect the storage is ephemeral. So you lost your data (especially our SQLite db) once you delete the container. So we need to Backup it (use external volume or other approach).
 - I use litestream to replicate the sqlite db and save it to S3 compatible object storage (I use Cloudflare R2). The cost is super cheap (or free) and the data is save. I also can take a look my data without go to my server.
 - Since we know we will deal with ephemeral container, it's nice to setup remote storage for our media, e.g. in S3.
 
 To achive that goals, we need to check current ghost docker image and look how we can improve it.
 
+## Motivation
+
+I got 2 incidents that make me lost all of my blog data and 1 minor issue. 
+
+The first one when I upgrade the Ghost version in docker, suddenly it wipe out my data in MySQL, novice mistake: not creating a backup. The second one is when I late to pay my server, they delete my instance and all of its data. I do have a backup, but inside the server 😭, I just don't expect my personal matter makes we forgot to pay it. Well, I think it's because it just a "side-project", I'm not looking at detail like how I implement in my company.
+
+The minor one is due to little to no traffic in my website, so sometimes mysql goes to "sleep" mode and the first request makes Ghost response a 5xx. Well we can fix it but the error is not so obvious and intermitent.
+
+That's why I try to use another approach by using Ghost (Docker) with SQLite and Litestream. It will maintain my backup and save it to Cloudflare R2 (which is really cheap to free).
+
 ## TLDR
 
 Use my docker image in dockerhub and use it's configuration.
+
+[https://hub.docker.com/r/tegarimansyah/ghost-sqlite](https://hub.docker.com/r/tegarimansyah/ghost-sqlite)
 
 ## What We Have Inside Ghost Official Image?
 
@@ -153,7 +165,8 @@ RUN tar -xvf /usr/local/bin/litestream-v0.3.13-linux-arm6.tar.gz -C /usr/local/b
 
 # Add streamlite config
 COPY ./litestream.yml ./litestream.yml
-CMD ["litestream", "replicate", "-config", "litestream.yml", "-exec", "'node current/index.js'"]
+# litestream replicate -config litestream.yml -exec 'node current/index.js'
+CMD ["litestream", "replicate", "-config", "litestream.yml", "-exec", "node current/index.js"]
 ```
 
 In the last 2 lines of the new dockerfile, we can see we add litestream config and how we change the way we run the container. We will talk about config in the next chapter and focus on CMD for now. 
@@ -170,7 +183,7 @@ Since we need not only node process but also litestream process, and the best pr
 
 ```diff
 - CMD ["node", "current/index.js"]
-+ CMD ["litestream", "replicate", "-config", "litestream.yml", "-exec", "'node current/index.js'"]
++ CMD ["litestream", "replicate", "-config", "litestream.yml", "-exec", "node current/index.js"]
 ```
 
 ## Add S3 Storage Adapter

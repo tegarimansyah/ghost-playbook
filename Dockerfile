@@ -1,4 +1,4 @@
-FROM ghost:alpine
+FROM ghost:5.79.4-alpine
 
 # Add S3 Storage Adapter
 ENV storage__active s3
@@ -12,7 +12,9 @@ ADD https://github.com/benbjohnson/litestream/releases/download/v0.3.13/litestre
 RUN tar -xvf /usr/local/bin/litestream-v0.3.13-linux-arm6.tar.gz -C /usr/local/bin && \
     rm /usr/local/bin/litestream-v0.3.13-linux-arm6.tar.gz && \
     apk add --no-cache sqlite
-
-# Add streamlite config
 COPY ./litestream.yml /var/lib/ghost/litestream.yml
-CMD ["litestream", "replicate", "-config", "litestream.yml", "-exec", "'node current/index.js'"]
+
+# Add entrypoint and command
+COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["litestream", "replicate", "-config", "litestream.yml", "-exec", "node current/index.js"]
